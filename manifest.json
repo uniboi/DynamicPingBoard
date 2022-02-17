@@ -1,6 +1,7 @@
 {
     "name": "DynamicPingBoard",
-    "version_number": "1.0",
+    "version_number": "1.2.0",
     "website_url": "https://github.com/uniboi/DynamicPingBoard",
-    "description": "Display connected players and corresponding pings in color"
+    "description": "Display connected players and corresponding pings in color",
+    "dependencies": []
 }
