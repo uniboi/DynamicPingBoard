@@ -15,7 +15,7 @@ struct {
     vector highLatencyColor = Vector(1, 0, 0)
     vector highlightColor = Vector(1, 0.5, 0) // Highlighted text color < %r, %g, %b >
     bool drawBackground = true
-    int orderBy = 0 // You can change this at runtime with the menu. 0: Unordered | 1: Ascending | 2: Descending
+    int orderBy = 0 // You can change this at runtime with the menu. 0: Unordered | 1: Ascending | 2: Descending | 3: Name Ascending | 4: Name Descending
 }settings
 
 
@@ -122,11 +122,11 @@ void function setOrderUnordered(){
 }
 
 void function setOrderNameDescending(){
-    settings.orderBy = 3
+    settings.orderBy = 4
 }
 
 void function setOrderNameAscending(){
-    settings.orderBy = 4
+    settings.orderBy = 3
 }
 
 void function addSubMenuSorting(){
@@ -155,10 +155,11 @@ array < entity > function GetSpecifiedSortedPlayers(int comp, int team){
             compareFunc = compare_descending
             break;
         case 3:
-            compareFunc = compareByUsernameDescending
+            compareFunc = compareByUsernameAscending
             break;
         case 4:
-            compareFunc = compareByUsernameAscending
+            compareFunc = compareByUsernameDescending
+            break;
         default:
             return players;
     }
@@ -172,40 +173,40 @@ void function resetActiveMenuItemLists(){
     menuInternal.selected = [0]
 }
 
-int function compareByUsernameDescending(entity player1, entity player2){
-    string p1 = player1.GetPlayerName().toupper()
-    string p2 = player2.GetPlayerName().toupper()
-
-    for (int i; i < p1.len() && i < p2.len(); i++){
-        if(i >= p1.len())
-            return 1;
-        if(i >= p2.len())
-            return -1;
-        if(p1[i] == p2[i])
-            continue;
-        if(p1[i] < p2[i])
-            return 1;
-        if(p1[i] > p2[i])
-            return -1
-    }
-    return 0;
-}
-
 int function compareByUsernameAscending(entity player1, entity player2){
     string p1 = player1.GetPlayerName().toupper()
     string p2 = player2.GetPlayerName().toupper()
 
-    for (int i; i < p1.len() && i < p2.len(); i++){
+    for (int i; i < p1.len() || i < p2.len(); i++){
         if(i >= p1.len())
-            return 1;
-        if(i >= p2.len())
             return -1;
+        if(i >= p2.len())
+            return 1;
         if(p1[i] == p2[i])
             continue;
         if(p1[i] < p2[i])
             return -1;
         if(p1[i] > p2[i])
             return 1
+    }
+    return 0;
+}
+
+int function compareByUsernameDescending(entity player1, entity player2){
+    string p1 = player1.GetPlayerName().toupper()
+    string p2 = player2.GetPlayerName().toupper()
+
+    for (int i; i < p1.len() || i < p2.len(); i++){
+        if(i >= p1.len())
+            return -1;
+        if(i >= p2.len())
+            return 1;
+        if(p1[i] == p2[i])
+            continue;
+        if(p1[i] < p2[i])
+            return 1;
+        if(p1[i] > p2[i])
+            return -1
     }
     return 0;
 }
