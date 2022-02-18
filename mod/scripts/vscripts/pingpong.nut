@@ -18,33 +18,66 @@ struct {
     int orderBy = 0 // You can change this at runtime with the menu. 0: Unordered | 1: Ascending | 2: Descending
 }settings
 
-/** SUBMENU ONSELECT REFERENCES */
-void function setRefs(){
-    menuInternal.itemSelect = [[addSubMenuSorting, switchBg], [setOrderAscending, setOrderDescending, setOrderUnordered]]
-}
 
 /** MENU SETTINGS */
 struct {
+    int maxPlayerDisplayExpensive
     vector topoOrigin = <50,300,0>
-    vector topoStretchX = <200, 0, 0>
-    vector topoStretchY = <0, 400, 0>
-    /** For some reason the topology doesn't take new values. I'll look into it in the future. Ignore the following two. */
-    int appendStretchX = 0
-    int increaseStretchX = 100
-    /**  */
+    vector topoStretchX = <220, 0, 0>
+    vector topoStretchY = <0, 200, 0>
     vector highlightColor = <1, 0.5, 0>
     vector textColor = <1, 1, 1>
     vector topoColor = <0, 0, 0>
-    float subTextXOffset
     float topoAlpha = 0.5
     float textAlpha = 1
     float referenceTextSize = 400
     float xBaseSpace = 0.03
-    float xSpace = 1.2
     float yBaseSpace = 0
+    array < array < string > > menus = [["sort", "background"], ["asc", "desc", "normal", "name asc", "name desc"]]
+    /*
+        I added the compact menu down the line because of rui limitations and the original broke somewhere
+        Because I don't recommend using it I'm not going to do anything about it.
+        Just ignore the following.
+    */
+    float xSpace = 1.2
     float ySpace = 0.4
-    array < array < string > > menus = [["sort", "background"], ["asc", "desc", "normal"]]
+    bool useCompact = true
+    int menuCompact = 0 // 0: Dynamic | 1: Compact | 2: Expensive
+    /** For some reason the topology doesn't take new values. I'll look into it in the future. Ignore the following two. */
+    int appendStretchX = 0
+    int increaseStretchX = 100
 }menuSettings
+
+/*
+    I really don't recommend working with this menu implementation because it's pretty shit and I haven't bothered looking into UI.
+    I'm going to explain how it works anyways in case some maniac wants to change something.
+
+    [*] menuSettings.menus are the strings of every possible submenu.
+        [*] The first subarray HAS TO BE the submenu opened with the menu.
+        [*] The order of the rest doesn't matter
+    [*] menuInternal.itemSelect are the function references for each menu item
+        [*] The first subarray HAS TO BE the functionrefs for the items opened with the menu
+        [*] The order of the rest doesn't matter but I would recommend using the same order like in menuSettings.menus
+    [*] To add a submenu on selection, you have to append some things to some arrays
+        [*] The list of item titles to menuInternal.activeMenuItemList
+            [*] Like this: menuInternal.activeMenuItemList.append(menuSettings.menus[1])
+        [*] The list of corresponding function references
+            [*] Like this: menuInternal.functionIndexList.append(1)
+        [*] The selected item index of the opened submenu (doesn't have to be 0)
+            [*] Like this: menuInternal.selected.append(0)
+    [*] === THE ORDER OF ITEM TITLE AND CORRESPONDING FUNCTIONREF IN THE ARRAY HAVE TO BE THE SAME === (I think I don't remember 100%)
+        [*] For example, like this:
+            [*] [["item1", "item2"], ["item1.1", "item1.2"], ["item2.1"]]
+            [*] [[onselect1, onselect2], [onselect11, onselect12], [onselect21]]
+    [*] Functionrefs can only be void. Edit the code if this bothers you.
+
+    That's it if I remember correctly
+*/
+
+/** SUBMENU ONSELECT REFERENCES */
+void function setRefs(){
+    menuInternal.itemSelect = [[addSubMenuSorting, switchBg], [setOrderAscending, setOrderDescending, setOrderUnordered, setOrderNameAscending, setOrderNameDescending]]
+}
 
 // Internal
 struct {
@@ -54,6 +87,7 @@ struct {
 // My code & approach is pretty scuffed. I don't advise you to copy my menu code.
 // ... especially my use of topologies
 struct {
+    bool killFollowing = false
     array < int > functionIndexList = [0]
     array < int > selected = [0]
     bool showingMenu = false
@@ -64,12 +98,12 @@ struct {
     int hSel = 0
     array < array < string > > activeMenuItemList = []
     array < var > menuRuis = []
+    var menuRui
     var menuGroundRui
     array < array < void functionref() > > itemSelect
 }menuInternal
 
 void function pingDisplayPreCache() {
-    var rui = createEmptyRUI()
     setRefs()
     resetActiveMenuItemLists()
     menusThread()
@@ -77,7 +111,6 @@ void function pingDisplayPreCache() {
 
 void function setOrderAscending(){
     settings.orderBy = 1
-
 }
 
 void function setOrderDescending(){
@@ -86,6 +119,14 @@ void function setOrderDescending(){
 
 void function setOrderUnordered(){
     settings.orderBy = 0
+}
+
+void function setOrderNameDescending(){
+    settings.orderBy = 3
+}
+
+void function setOrderNameAscending(){
+    settings.orderBy = 4
 }
 
 void function addSubMenuSorting(){
@@ -106,7 +147,6 @@ array < entity > function GetSpecifiedSortedPlayers(int comp, int team){
 		players = GetPlayerArrayOfTeam( team )
 	else
 		players = GetPlayerArray()
-
     switch (comp) {
         case 1:
             compareFunc = compare_ascending
@@ -114,6 +154,11 @@ array < entity > function GetSpecifiedSortedPlayers(int comp, int team){
         case 2:
             compareFunc = compare_descending
             break;
+        case 3:
+            compareFunc = compareByUsernameDescending
+            break;
+        case 4:
+            compareFunc = compareByUsernameAscending
         default:
             return players;
     }
@@ -127,17 +172,55 @@ void function resetActiveMenuItemLists(){
     menuInternal.selected = [0]
 }
 
+int function compareByUsernameDescending(entity player1, entity player2){
+    string p1 = player1.GetPlayerName().toupper()
+    string p2 = player2.GetPlayerName().toupper()
+
+    for (int i; i < p1.len() && i < p2.len(); i++){
+        if(i >= p1.len())
+            return 1;
+        if(i >= p2.len())
+            return -1;
+        if(p1[i] == p2[i])
+            continue;
+        if(p1[i] < p2[i])
+            return 1;
+        if(p1[i] > p2[i])
+            return -1
+    }
+    return 0;
+}
+
+int function compareByUsernameAscending(entity player1, entity player2){
+    string p1 = player1.GetPlayerName().toupper()
+    string p2 = player2.GetPlayerName().toupper()
+
+    for (int i; i < p1.len() && i < p2.len(); i++){
+        if(i >= p1.len())
+            return 1;
+        if(i >= p2.len())
+            return -1;
+        if(p1[i] == p2[i])
+            continue;
+        if(p1[i] < p2[i])
+            return -1;
+        if(p1[i] > p2[i])
+            return 1
+    }
+    return 0;
+}
+
 int function compare_ascending(entity player1, entity player2)
 {
-    if(player1.GetPlayerGameStat(PGS_PING).tofloat()>player2.GetPlayerGameStat(PGS_PING).tofloat()) return 1
-    else if(player1.GetPlayerGameStat(PGS_PING).tofloat()<player2.GetPlayerGameStat(PGS_PING).tofloat()) return -1
+    if(player1.GetPlayerGameStat(PGS_PING)>player2.GetPlayerGameStat(PGS_PING)) return 1
+    else if(player1.GetPlayerGameStat(PGS_PING)<player2.GetPlayerGameStat(PGS_PING)) return -1
     return 0;
 }
 
 int function compare_descending(entity player1, entity player2)
 {
-    if(player1.GetPlayerGameStat(PGS_PING).tofloat()<player2.GetPlayerGameStat(PGS_PING).tofloat()) return 1
-    else if(player1.GetPlayerGameStat(PGS_PING).tofloat()>player2.GetPlayerGameStat(PGS_PING).tofloat()) return -1
+    if(player1.GetPlayerGameStat(PGS_PING)<player2.GetPlayerGameStat(PGS_PING)) return 1
+    else if(player1.GetPlayerGameStat(PGS_PING)>player2.GetPlayerGameStat(PGS_PING)) return -1
     return 0;
 }
 
@@ -152,7 +235,6 @@ void function createTopology(vector stretchX){
     // Why isn't the new stretch taken over?
     menuInternal.menuTopology = RuiTopology_CreatePlane( menuSettings.topoOrigin, stretchX, menuSettings.topoStretchY, false )
     menuInternal.refTop = RuiTopology_CreatePlane( menuSettings.topoOrigin, <100, 0, 0>, <0, 50, 0>, false )
-    print(type(menuInternal.menuTopology))
 }
 
 void function destroyTopology(){
@@ -175,14 +257,13 @@ void function deregisterMenuListeners(){
 }
 
 void function registerPermanentListeners(){
-    RegisterButtonPressedCallback(KEY_F2, handleDisplay)
+    RegisterButtonPressedCallback(KEY_F1, handleDisplay)
     RegisterButtonPressedCallback(KEY_U, handleMenu)
 }
 
 void function colorMenuItem(){
     if(menuInternal.menuRuis.len() > 0 && menuInternal.showingMenu)
         {
-            string slc = menuInternal.selected.tostring()
             int corRuiIndex = 0
             int currentMenuRuiIndex
             for (int i; i < menuInternal.selected.len(); i++) {
@@ -212,6 +293,8 @@ void function ptrUp(var e){
         menuInternal.selected[lastSelectedIndex()]++
     }
     colorMenuItem()
+    if(menuSettings.useCompact)
+        RuiSetString(menuInternal.menuRui, "msgText", singleMenuString())
 }
 
 void function ptrDown(var e){
@@ -221,6 +304,8 @@ void function ptrDown(var e){
         menuInternal.selected[lastSelectedIndex()]--
     }
     colorMenuItem()
+    if(menuSettings.useCompact)
+        RuiSetString(menuInternal.menuRui, "msgText", singleMenuString())
 }
 
 void function deselectItem(var e){
@@ -231,13 +316,13 @@ void function deselectItem(var e){
         menuInternal.functionIndexList.pop()
         menuInternal.lastSel = 0
         menuSettings.appendStretchX -= menuSettings.increaseStretchX
-        updateRuntimeMenu()
+        if(!menuSettings.useCompact)
+            updateRuntimeMenu()
+        else
+            RuiSetString(menuInternal.menuRui, "msgText", singleMenuString())
     }
     else
-        {
-            menuInternal.showingMenu = false
-            killMenu()
-        }
+        killMenu()
 }
 void function selectItem(var e){
     int lastListIndex = menuInternal.functionIndexList.len()-1
@@ -246,28 +331,54 @@ void function selectItem(var e){
     menuInternal.lastSel = 0
     int index = menuInternal.functionIndexList[lastListIndex]
     menuInternal.itemSelect[index][menuInternal.selected[lastSelectedIndex()]]()
+    if(menuInternal.killFollowing){
+        menuInternal.killFollowing = false
+        killMenu()
+        return
+    }
     menuSettings.appendStretchX += menuSettings.increaseStretchX
-    updateRuntimeMenu()
+    if(!menuSettings.useCompact)
+        updateRuntimeMenu()
+    else
+        RuiSetString(menuInternal.menuRui, "msgText", singleMenuString())
 }
 
 void function updateRuntimeMenu(){
-    foreach (rui in menuInternal.menuRuis) {
-            RuiDestroyIfAlive(rui)
+    if(!menuSettings.useCompact){
+        foreach (rui in menuInternal.menuRuis) {
+                RuiDestroyIfAlive(rui)
+        menuInternal.menuRuis.clear()
+        colorMenuItem()
+        }
     }
-    menuInternal.menuRuis.clear()
-    destroyTopology()
-    vector sx = menuSettings.topoStretchX
-    sx.x = sx.x + menuSettings.appendStretchX
-    print(sx)
-    createTopology(sx)
+    else {
+        RuiSetString(menuInternal.menuRui, "msgText", singleMenuString())
+    }
+        // destroyTopology()
+        // vector sx = menuSettings.topoStretchX
+        // sx.x = sx.x + menuSettings.appendStretchX
+        // createTopology(sx)
     displayRuntimeMenu()
-    colorMenuItem()
 }
 
 void function handleMenu(var pressedKey){
     menuInternal.showingMenu = !menuInternal.showingMenu
     if(menuInternal.showingMenu)
         {
+            switch (menuSettings.menuCompact) {
+                case 0:
+                    if(GetPlayerArray().len() > menuSettings.maxPlayerDisplayExpensive)
+                        menuSettings.useCompact = true
+                    else
+                        menuSettings.useCompact = false
+                    break;
+                case 1:
+                    menuSettings.useCompact = true
+                    break;
+                case 2:
+                    menuSettings.useCompact = false
+                    break;
+            }
             createTopology(menuSettings.topoStretchX)
             registerMenuListeners()
             menuInternal.menuGroundRui = RuiCreate( $"ui/basic_image.rpak", menuInternal.menuTopology, RUI_DRAW_HUD, -1 )
@@ -281,31 +392,84 @@ void function handleMenu(var pressedKey){
 }
 
 void function killMenu(){
+    menuInternal.showingMenu = false
+    if (!menuSettings.useCompact) {
+        foreach (rui in menuInternal.menuRuis) {
+            RuiDestroyIfAlive(rui)
+        }
+    }
+    else
+        RuiDestroyIfAlive(menuInternal.menuRui)
     deregisterMenuListeners()
     destroyTopology()
     RuiDestroyIfAlive(menuInternal.menuGroundRui)
-    foreach (rui in menuInternal.menuRuis) {
-        RuiDestroyIfAlive(rui)
-    }
     menuInternal.functionIndexList = [0]
     menuInternal.lastSel = 0
     menuInternal.menuRuis.clear()
     resetActiveMenuItemLists()
 }
 
-void function displayRuntimeMenu(){
+string function singleMenuString(){
+    string mString = ""
+    array < array < string > > l = menuInternal.activeMenuItemList
+    int i
+    int longest
+    foreach (array < string > sl in l) {
+        if(sl.len() > longest)
+            longest = sl.len()
+    }
+
+    for (int i; i < longest; i++) {
+        int emptyLists
+        for(int ii; ii < l.len(); ii++){
+            if(emptyLists >= l.len())
+                break
+            if(i >= l[ii].len()){
+                for (int i; i < 11; i++) {
+                    mString += " "
+                }
+                emptyLists++
+                continue
+            }
+            else {
+                string s = l[ii][i]
+                int nSeperators = 11
+                if(menuInternal.selected[ii] == i){
+                    mString += ">"
+                    nSeperators = 10
+                }
+                mString += s
+                for (int i; i < nSeperators-s.len(); i++) {
+                    mString += " "
+                }
+            }
+        }
+        mString += "\n"
+    }
+    return mString
+}
+
+void function createSingleRuntimeMenu(){
+    menuInternal.menuRui = createRef(<menuSettings.xBaseSpace,menuSettings.yBaseSpace,0>, menuInternal.refTop, singleMenuString())
+}
+
+void function displayMultipleRuntimeMenu(){
     for (int i; i < menuInternal.activeMenuItemList.len(); i++) {
         array < string > mItems = menuInternal.activeMenuItemList[i]
         for (int j; j < mItems.len(); j++) {
-            print(j)
             menuInternal.menuRuis.append(createRef(
                 <i*menuSettings.xSpace+menuSettings.xBaseSpace,
                 j*menuSettings.ySpace+menuSettings.yBaseSpace, 0>
                 , menuInternal.refTop, mItems[j]))
-            print(i*menuSettings.xSpace+menuSettings.xBaseSpace)
-            print(j*menuSettings.ySpace+menuSettings.yBaseSpace)
         }
     }
+}
+
+void function displayRuntimeMenu(){
+    if(!menuSettings.useCompact)
+        displayMultipleRuntimeMenu()
+    else
+        createSingleRuntimeMenu()
 }
 
 
@@ -338,19 +502,21 @@ var function createEmptyRUI() {
     return rui
 }
 
-void function killRUIs(array < array < var > > ruis) {
-    foreach(array < var > row in ruis) {
-        foreach(var cell in row) {
-            RuiDestroyIfAlive(cell)
-        }
+void function killRUIs(array <var > ruis) {
+    foreach(rui in ruis) {
+        RuiDestroyIfAlive(rui)
     }
 }
 
 void function ruiHandler() {
         array < array < var > > playerRows
-        array < array < int > > playerRefs
+        array < var > pingRuis
+        // string nonLocalPlayerNames
+        var playerRui
+        var nonLocalRui
         var background
         while (script.displayAlive) {
+        string nonLocalPlayerNames
         if(settings.drawBackground && background == null)
             background = RuiCreate($"ui/scoreboard_background.rpak", clGlobal.topoFullScreen, RUI_DRAW_HUD, 10)
         else if(!settings.drawBackground && background != null)
@@ -359,21 +525,22 @@ void function ruiHandler() {
                 background = null
             }
 
-        for (int i = 0; i < GetSpecifiedSortedPlayers(settings.orderBy, 0).len(); i++) {
-            while (playerRows.len() > GetSpecifiedSortedPlayers(settings.orderBy, 0).len()) {
-                array < var > row = playerRows.pop()
-                RuiDestroyIfAlive(row[0]) // Destroy unused ruis
-                RuiDestroyIfAlive(row[1])
+        nonLocalPlayerNames = ""
+        array < entity > players = GetSpecifiedSortedPlayers(settings.orderBy, 0)
+        for (int i = 0; i < players.len(); i++) {
+            while (pingRuis.len() > players.len()) {
+                RuiDestroyIfAlive(pingRuis.pop())
             }
-            while (playerRows.len() < GetSpecifiedSortedPlayers(settings.orderBy, 0).len()) {
-                playerRows.append([createEmptyRUI(), createEmptyRUI()]) // Populate needed array slots
+
+            while (pingRuis.len() < players.len()) {
+                pingRuis.append(createEmptyRUI())
             }
 
             /** USER PING COLOR */
             vector pingColor = settings.color
             if(settings.scaleColor)
               {
-                float p = GetSpecifiedSortedPlayers(settings.orderBy, 0)[i].GetPlayerGameStat(PGS_PING).tofloat() / settings.capPing.tofloat()
+                float p = players[i].GetPlayerGameStat(PGS_PING).tofloat() / settings.capPing.tofloat()
                 pingColor = < settings.lowLatencyColor.x+p*(settings.highLatencyColor.x-settings.lowLatencyColor.x),
                 settings.lowLatencyColor.y+p*(settings.highLatencyColor.y-settings.lowLatencyColor.y),
                 settings.lowLatencyColor.z+p*(settings.highLatencyColor.z-settings.lowLatencyColor.z) >
@@ -381,28 +548,41 @@ void function ruiHandler() {
 
             /** USERNAME COLOR*/
             vector usernameColor = settings.color
-            if (GetSpecifiedSortedPlayers(settings.orderBy, 0)[i].GetPlayerName() == GetLocalClientPlayer().GetPlayerName())
-              usernameColor = settings.highlightColor
-            else if(settings.drawUsernameLikePing)
-              usernameColor = pingColor
+            if (players[i].GetPlayerName() == GetLocalClientPlayer().GetPlayerName()){
+                usernameColor = settings.highlightColor
+                nonLocalPlayerNames += "\n"
+                if(playerRui)
+                    RuiDestroyIfAlive(playerRui)
+                playerRui = createEmptyRUI()
+                RuiSetFloat3(playerRui, "msgColor", settings.highlightColor)
+                RuiSetString(playerRui, "msgText", GetLocalClientPlayer().GetPlayerName())
+                RuiSetFloat2(playerRui, "msgPos", < settings.horizontalPos, settings.verticalPos + i * 0.0175, 0.0 > )
+            }
 
-            /** APPLY USERNAME */
-            RuiSetFloat3(playerRows[i][0], "msgColor", usernameColor)
-            RuiSetString(playerRows[i][0], "msgText", GetSpecifiedSortedPlayers(settings.orderBy, 0)[i].GetPlayerName())
-            RuiSetFloat2(playerRows[i][0], "msgPos", < settings.horizontalPos, settings.verticalPos + i * 0.025, 0.0 > )
+            else {
+                nonLocalPlayerNames += players[i].GetPlayerName() + "\n"
+            }
 
             /** APPLY PING */
-            RuiSetFloat3(playerRows[i][1], "msgColor", pingColor)
-            RuiSetString(playerRows[i][1], "msgText", GetSpecifiedSortedPlayers(settings.orderBy, 0)[i].GetPlayerGameStat(PGS_PING) + "ms")
-            RuiSetFloat2(playerRows[i][1], "msgPos", < settings.horizontalPos+0.1, settings.verticalPos+i*0.025, 0.0 > )
-
-            WaitFrame() // Update every frame
+            RuiSetFloat3(pingRuis[i], "msgColor", pingColor)
+            RuiSetString(pingRuis[i], "msgText", players[i].GetPlayerGameStat(PGS_PING) + "ms")
+            RuiSetFloat2(pingRuis[i], "msgPos", < settings.horizontalPos+0.1, settings.verticalPos+i*0.0175, 0.0 > )
+            if(!nonLocalRui)
+                nonLocalRui = createEmptyRUI()
+            RuiSetFloat3(nonLocalRui, "msgColor", settings.color)
+            RuiSetString(nonLocalRui, "msgText", nonLocalPlayerNames)
+            RuiSetFloat2(nonLocalRui, "msgPos", < settings.horizontalPos, settings.verticalPos, 0> )
+        }
+        for (int i; i<5; i++){
+            WaitFrame() // Update every 5 frames
         }
         if (!script.displayAlive) // Might change in while because of thread magic
         {
             if(settings.drawBackground && background != null)
                 RuiDestroyIfAlive(background)
-            killRUIs(playerRows) // Kill remaining ruis
+            killRUIs(pingRuis) // Kill remaining ruis
+            RuiDestroyIfAlive(nonLocalRui)
+            RuiDestroyIfAlive(playerRui)
             break
         }
     }

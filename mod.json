@@ -3,7 +3,7 @@
 	"Description": "Shows colored pings for each connected player. Toggle with F1",
 	"LoadPriority": 2,
 	"RequiredOnClient": false,
-	"Version": "1.2.0",
+	"Version": "1.2.5",
 
 	"Scripts": [
 		{
