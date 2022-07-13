@@ -2,8 +2,8 @@
 Pressing F1 toggles the list on / off.
 Pressing U toggles the runtime menu on / off.
 ## Functionality
-When open, a list of every connected player is displayed. Displayed informations are the username and current ping.
-You can open a menu while playing to change settings related to the ping display.
+When open, a list of every connected player is displayed. The displayed information includes the username and current ping.
+You can open the menu while playing to change settings related to the ping display.
 
 ## Menu Settings
 * sort
