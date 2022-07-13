@@ -9,7 +9,7 @@ You can open a menu while playing to change settings related to the ping display
 * sort
     + asc sorts by ascending ping
     + desc sorts by descending ping
-    + name asc sorty by names alphabetically
+    + name asc sort by names alphabetically
     + name desc does the reverse
 * background
     + switches the background of the ping display on / off
